@@ -1,0 +1,155 @@
+// ISATS - Thẩm định & Thẩm tra Khí nhà kính
+// Prisma schema mapped to the ISATS PostgreSQL structure.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  auditor
+  client
+  technical_expert
+
+  @@map("user_role")
+}
+
+enum ProjectType {
+  ghg_inventory
+  carbon_credit_project
+
+  @@map("project_type")
+}
+
+enum StandardType {
+  ISO_14064_1
+  ISO_14064_2
+  ISO_14064_3
+  VERRA_VCS
+  GOLD_STANDARD
+
+  @@map("standard_type")
+}
+
+model User {
+  id               String   @id @default(uuid()) @db.Uuid
+  fullName         String   @map("full_name") @db.VarChar(255)
+  email            String   @unique @db.VarChar(255)
+  phone            String?  @db.VarChar(50)
+  passwordHash     String   @map("password_hash") @db.VarChar(255)
+  role             UserRole @default(client)
+  organizationName String?  @map("organization_name") @db.VarChar(255)
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  clientProjects   GhgProject[]        @relation("ClientProjects")
+  ledVerifications VerificationProcess[] @relation("LeadAuditor")
+
+  @@map("users")
+}
+
+model GhgProject {
+  id                     String       @id @default(uuid()) @db.Uuid
+  clientId               String?      @map("client_id") @db.Uuid
+  projectCode            String       @unique @map("project_code") @db.VarChar(50)
+  projectName            String       @map("project_name") @db.VarChar(255)
+  sector                 String       @db.VarChar(100)
+  type                   ProjectType
+  standard               StandardType
+  reportingPeriodStart   DateTime?    @map("reporting_period_start") @db.Date
+  reportingPeriodEnd     DateTime?    @map("reporting_period_end") @db.Date
+  estimatedEmissionsTco2e Decimal?    @map("estimated_emissions_tco2e") @db.Decimal(12, 2)
+  status                 String       @default("submitted") @db.VarChar(50)
+  createdAt              DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  client         User?                @relation("ClientProjects", fields: [clientId], references: [id], onDelete: Cascade)
+  verifications  VerificationProcess[]
+  documents      ProjectDocument[]
+  correctiveActions CorrectiveAction[]
+
+  @@map("ghg_projects")
+}
+
+model VerificationProcess {
+  id                      String    @id @default(uuid()) @db.Uuid
+  projectId               String?   @map("project_id") @db.Uuid
+  leadAuditorId           String?   @map("lead_auditor_id") @db.Uuid
+  currentStage            String    @default("desk_review") @map("current_stage") @db.VarChar(50)
+  statementNumber         String?   @unique @map("statement_number") @db.VarChar(100)
+  verifiedEmissionsTco2e  Decimal?  @map("verified_emissions_tco2e") @db.Decimal(12, 2)
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  project     GhgProject? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  leadAuditor User?       @relation("LeadAuditor", fields: [leadAuditorId], references: [id])
+
+  @@map("verification_process")
+}
+
+model Article {
+  id           String   @id @default(uuid()) @db.Uuid
+  title        String   @db.VarChar(255)
+  slug         String   @unique @db.VarChar(255)
+  category     String?  @db.VarChar(100)
+  summary      String?  @db.Text
+  content      String   @db.Text
+  thumbnailUrl String?  @map("thumbnail_url") @db.Text
+  authorName   String?  @map("author_name") @db.VarChar(255)
+  isPublished  Boolean  @default(true) @map("is_published")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("articles")
+}
+
+model ProjectDocument {
+  id           String   @id @default(uuid()) @db.Uuid
+  projectId    String   @map("project_id") @db.Uuid
+  fileName     String   @map("file_name") @db.VarChar(255)
+  contentType  String   @map("content_type") @db.VarChar(100)
+  fileSize     Int      @map("file_size")
+  content      Bytes    @db.ByteA
+  uploadedAt   DateTime @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+
+  project GhgProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, uploadedAt])
+  @@map("project_documents")
+}
+
+model CorrectiveAction {
+  id          String   @id @default(uuid()) @db.Uuid
+  projectId   String   @map("project_id") @db.Uuid
+  code        String   @unique @db.VarChar(50)
+  title       String   @db.VarChar(255)
+  description String   @db.Text
+  status      String   @default("open") @db.VarChar(30)
+  dueDate     DateTime? @map("due_date") @db.Date
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  project GhgProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, status])
+  @@map("corrective_actions")
+}
+
+// Extension beyond the supplied structure: a contact form needs a landing
+// place for submissions so the public site can persist enquiries.
+model ContactInquiry {
+  id               String   @id @default(uuid()) @db.Uuid
+  fullName         String   @map("full_name") @db.VarChar(255)
+  email            String   @db.VarChar(255)
+  phone            String?  @db.VarChar(50)
+  company          String?  @db.VarChar(255)
+  industry         String?  @db.VarChar(100)
+  requestedStandard String?  @map("requested_standard") @db.VarChar(100)
+  subject          String?  @db.VarChar(255)
+  message          String   @db.Text
+  status           String   @default("new") @db.VarChar(50)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("contact_inquiries")
+}

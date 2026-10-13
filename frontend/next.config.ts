@@ -1,9 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  // ISATS serves authenticated client/admin dashboards plus database-backed
+  // pages that are always request-time, so the app opts out of the Cache
+  // Components model and renders dynamically.
+  cacheComponents: false,
   turbopack: {
     rules: {
       "*.css": {
@@ -11,6 +12,14 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
+  },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+      },
+    ],
   },
 };
 
